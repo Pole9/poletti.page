@@ -29,7 +29,8 @@
     // ⚠️ Sostituisci questi valori con quelli del tuo progetto Supabase
     const SUPABASE_URL = "https://mozqrlpjqubgsnbgthd.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_WRIrI4FT4CTA_iIJ8R2yLg_MZFLVDli";
-    const supabase = supabase_js.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const supabaseClient = (window.supabase || window.supabase_js);
+    const supabase = supabaseClient.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const DEVICE_ID = (() => {
       let id = localStorage.getItem("ocf_device_id");
       if (!id) { id = "enrico_" + Math.random().toString(36).slice(2, 9); localStorage.setItem("ocf_device_id", id); }
