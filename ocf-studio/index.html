@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OCF Studio — Lumis Finance</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; }
+    .prose strong { font-weight: 700; }
+    .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+    .scrollbar-thin::-webkit-scrollbar-track { background: #f1f5f9; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 2px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useMemo, useRef } = React;
+    const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart, BarChart, Bar, Legend } = Recharts;
+
+    // ─── SUPABASE CONFIG ─────────────────────────────────────────────────────────
+    // ⚠️ Sostituisci questi valori con quelli del tuo progetto Supabase
+    const SUPABASE_URL = "https://mozqrlpjqubgsnbgthd.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_WRIrI4FT4CTA_iIJ8R2yLg_MZFLVDli";
+    const supabase = supabase_js.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const DEVICE_ID = (() => {
+      let id = localStorage.getItem("ocf_device_id");
+      if (!id) { id = "enrico_" + Math.random().toString(36).slice(2, 9); localStorage.setItem("ocf_device_id", id); }
+      return id;
+    })();
+
+    // ─── TEORIA ──────────────────────────────────────────────────────────────────
+    const TEORIA = [
+      { id:"A1", materia:"A", titolo:"MiFID II — Servizi di Investimento", sezioni:[
+        { titolo:"Classificazione dei Clienti", contenuto:`**RETAIL** (massima tutela)\nPersone fisiche e PMI. Ricevono tutte le protezioni MiFID: appropriatezza, adeguatezza, best execution, informativa completa.\n\n**PROFESSIONALE** (tutela ridotta)\nDi diritto: banche, SIM, SGR, assicurazioni, governi, grandi imprese (≥2 su 3: bilancio ≥20M€, fatturato ≥40M€, fondi propri ≥2M€).\nSu richiesta (opt-up): operazioni significative 10x/trimestre, portafoglio >500.000€, o esperienza professionale nel settore.\n\n**ELIGIBLE COUNTERPARTY** (tutela minima)\nBanche, SIM, SGR, fondi pensione, governi. Esenzione da best execution e appropriatezza.` },
+        { titolo:"Servizi di Investimento", contenuto:`I 7 servizi MiFID II:\n1. **Negoziazione per conto proprio** — trading in proprio come controparte\n2. **Esecuzione ordini** — per conto dei clienti su mercati\n3. **RTO** — ricezione e trasmissione ordini a terzi\n4. **Gestione portafogli (GPM)** — discrezionale individuale\n5. **Consulenza** — raccomandazione personalizzata ← unico servizio del CF autonomo\n6. **Collocamento** — distribuzione strumenti di terzi\n7. **Gestione MTF/OTF** — sistemi multilaterali\n\n**Il CF autonomo può svolgere SOLO il servizio 5.** Non esegue ordini, non gestisce portafogli.` },
+        { titolo:"Adeguatezza vs Appropriatezza", contenuto:`**ADEGUATEZZA** (consulenza e GPM)\nValuta: conoscenza + esperienza + situazione finanziaria + obiettivi + orizzonte + tolleranza al rischio.\nSe non adeguato: il CF NON deve raccomandarlo. Obbligo vincolante.\nDocumento di adeguatezza obbligatorio.\n\n**APPROPRIATEZZA** (altri servizi: RTO, esecuzione)\nValuta solo: conoscenza ed esperienza.\nSe non appropriato: warning al cliente, ma il cliente può procedere.\n\n**Differenza chiave:** nell'adeguatezza la raccomandazione è vincolata, nell'appropriatezza è solo un avviso.` },
+        { titolo:"Best Execution", contenuto:`Obbligo per intermediari di ottenere il miglior risultato nell'esecuzione degli ordini.\n\n**Fattori in ordine di importanza per retail:**\n1. Prezzo dello strumento\n2. Costi totali di esecuzione\n3. Velocità di esecuzione\n4. Probabilità di esecuzione e regolamento\n5. Dimensione dell'ordine\n\n**Obblighi:** definire politica di esecuzione, informare il cliente, consenso preventivo, revisione annuale.\n\nIl CF autonomo non esegue ordini → best execution non si applica direttamente.` },
+        { titolo:"Conflitti di Interesse e Inducements", contenuto:`**CF Autonomo: DIVIETO ASSOLUTO** di ricevere retrocessioni, commissioni o benefici da terzi.\nPuò ricevere SOLO parcella dal cliente.\nQualsiasi beneficio ricevuto da terzi va restituito al cliente.\n\n**Fonti tipiche di conflitto:** retrocessioni da produttori, doppio mandato, incentivi interni su volumi.\n\n**Questo è il pilastro dell'indipendenza:** il CF autonomo non ha conflitti di interesse strutturali. È il suo vantaggio competitivo principale.` },
+        { titolo:"Obblighi Informativi (KID/KIID)", contenuto:`**KID** (Key Information Document — PRIIPS): documento standardizzato max 3 pagine per prodotti retail (fondi, strutturati, unit-linked). Contiene: obiettivi, rischi, scenari performance, costi, reclami.\n\n**KIID** (Key Investor Information Document — UCITS): per fondi UCITS. Progressivamente sostituito da KID/PRIIPS.\n\n**Pre-contrattuale:** info sull'intermediario, servizi, strumenti, costi ex-ante, conflitti di interesse.\n\n**Post-contrattuale:** rendicontazione periodica (almeno annuale per GPM), avviso perdita 10% del portafoglio, costi effettivi ex-post.` },
+      ]},
+      { id:"A2", materia:"A", titolo:"Disciplina dei Consulenti Finanziari", sezioni:[
+        { titolo:"Albo Unico OCF — Le 3 Sezioni", contenuto:`**SEZIONE 1 — Consulenti Finanziari Autonomi (CFA)**\nIndipendenti, senza mandato di intermediari. Remunerati SOLO dal cliente. Vietato ricevere retrocessioni. Polizza RCT obbligatoria.\n\n**SEZIONE 2 — CF Abilitati all'Offerta Fuori Sede (ex-promotori)**\nOperano con mandato esclusivo di un intermediario (banca, SIM, SGR). Remunerati dall'intermediario. Non ricevono denaro direttamente dai clienti.\n\n**SEZIONE 3 — Società di Consulenza Finanziaria (SCF)**\nPersone giuridiche che prestano consulenza indipendente. Stesse regole del CFA in forma societaria.` },
+        { titolo:"Requisiti di Iscrizione", contenuto:`**ONORABILITÀ:** No condanne penali per reati finanziari, fallimento, frode. No misure di prevenzione. No interdizione dai pubblici uffici.\n\n**PROFESSIONALITÀ:** Laurea in materie economiche/giuridiche (o equivalenti) + superamento esame OCF + eventuale esperienza qualificata.\n\n**ASSICURATIVI (CF autonomi e SCF):**\nPolizza RCT obbligatoria.\nMassimale minimo: 1.250.000€ per sinistro, 1.850.000€ annuo.\n\n**AGGIORNAMENTO:** Formazione continua obbligatoria (almeno 30 ore annue).` },
+        { titolo:"Obblighi e Divieti del CF Autonomo", contenuto:`**DIVIETI ASSOLUTI:**\n- Ricevere denaro dai clienti a qualsiasi titolo\n- Ricevere retrocessioni/commissioni/benefici da terzi\n- Avere mandato di alcun intermediario\n- Eseguire ordini o gestire portafogli\n\n**OBBLIGHI:**\n- Diligenza, correttezza, trasparenza\n- Contratto scritto con il cliente (forma scritta a pena di nullità)\n- Dichiarazione di adeguatezza per ogni raccomandazione\n- Aggiornamento professionale continuo\n- Il contratto deve indicare: servizi prestati, compenso, modalità di aggiornamento` },
+        { titolo:"Procedimento Disciplinare OCF", contenuto:`**Organo competente:** Commissione Arbitrale OCF\n\n**Sanzioni in ordine crescente:**\n1. Richiamo scritto — infrazioni lievi\n2. Censura — media gravità\n3. **Sospensione** — da 1 giorno a 1 anno (infrazioni gravi)\n4. **Radiazione** — cancellazione permanente (infrazioni gravissime)\n\n**Cause tipiche di radiazione:** condanna penale passata in giudicato, grave e reiterata violazione degli obblighi, attività illecite.\n\n**Sospensione cautelare:** può essere disposta in attesa del procedimento (non è sanzione definitiva).\n\n**Ricorso:** contro le decisioni OCF → TAR.` },
+      ]},
+      { id:"A3", materia:"A", titolo:"Gestione Collettiva del Risparmio", sezioni:[
+        { titolo:"UCITS vs FIA", contenuto:`**UCITS** (Direttiva armonizzata europea)\n- Investono in strumenti liquidi e quotati\n- Diversificazione: max 10% in un singolo emittente (regola 5/10/40)\n- Passaporto europeo: distribuzione in tutta l'UE con semplice notifica\n- Liquidità: rimborso almeno 2 volte/mese\n\n**FIA** (AIFMD — Alternative Investment Fund Managers Directive)\n- Libertà di investimento: illiquido, private equity, real estate, hedge fund\n- Principalmente per investitori professionali\n- Minori obblighi di diversificazione e liquidità\n\n**Regola 5/10/40 UCITS:** max 10% in un emittente; gli emittenti con >5% non possono superare complessivamente il 40% del portafoglio.` },
+        { titolo:"SGR, SICAV, SICAF", contenuto:`**SGR (Società di Gestione del Risparmio)**\nAutorizzata da Banca d'Italia. Gestisce fondi (UCITS e FIA). Il patrimonio del fondo è separato da quello della SGR (protezione degli investitori).\n\n**SICAV (Società di Investimento a Capitale Variabile)**\nFondo in forma societaria (SPA). Il patrimonio = capitale sociale. Il quotista è anche azionista. Equivalente ai fondi aperti in forma societaria.\n\n**SICAF (Società di Investimento a Capitale Fisso)**\nFondo chiuso in forma societaria. Capitale fisso. Tipica dei FIA (private equity, immobiliare).\n\n**Banca Depositaria:** custodisce il patrimonio del fondo, controlla la legittimità delle operazioni della SGR. Ruolo chiave nella protezione degli investitori.` },
+        { titolo:"Fondi Aperti vs Chiusi", contenuto:`**FONDI APERTI**\n- Sottoscrizione e rimborso in qualsiasi momento\n- NAV calcolato frequentemente (daily)\n- Investono in strumenti liquidi\n- Tipici UCITS: fondi comuni retail, ETF\n\n**FONDI CHIUSI**\n- Raccolta nella fase di lancio\n- Rimborso solo alla scadenza o in finestre specifiche\n- Possono investire in attivi illiquidi (immobili, aziende non quotate)\n- Durata definita (tipicamente 5-10 anni)\n- Tipici FIA: immobiliari, private equity, venture capital\n\n**Differenza chiave:** liquidità. I fondi chiusi possono investire in ciò che un fondo aperto non può (illiquido) proprio perché non devono garantire rimborsi frequenti.` },
+      ]},
+      { id:"A4", materia:"A", titolo:"Mercati e Abusi di Mercato (MAR)", sezioni:[
+        { titolo:"Mercati Regolamentati, MTF, OTF", contenuto:`**MERCATO REGOLAMENTATO**\nSistema multilaterale gestito da un gestore del mercato, autorizzato da Consob. Obblighi massimi. Esempio IT: Euronext Milan (ex Borsa Italiana).\n\n**MTF (Multilateral Trading Facility)**\nGestito da un'impresa di investimento o gestore del mercato. Regole non-discriminatorie per l'accesso. Minori obblighi vs mercato regolamentato. Esempi: EuroTLX, Hi-MTF.\n\n**OTF (Organised Trading Facility)**\nIntrodotto da MiFID II (non esisteva in MiFID I). Per obbligazioni, derivati, prodotti strutturati — NON per azioni. Gestito con discrezionalità nell'esecuzione.` },
+        { titolo:"Insider Trading e Manipolazione (MAR)", contenuto:`**Regolamento UE 596/2014 (MAR)**\n\n**INSIDER TRADING**\nUsare informazioni privilegiate per operare su strumenti finanziari.\nInformazione privilegiata = precisa + non pubblica + price sensitive.\nPrimary insiders: dirigenti, soci significativi. Tippees: chi riceve l'info.\nSanzioni: reclusione fino a 12 anni + sanzioni amministrative elevate.\n\n**MANIPOLAZIONE DI MERCATO — Forme tipiche:**\n- Wash trading: operazioni fittizie per gonfiare volumi\n- Painting the tape: serie di operazioni per influenzare prezzi\n- Spoofing: ordini immessi e subito cancellati per creare falsa domanda/offerta\n- Market cornering: acquistare posizioni dominanti per controllare il prezzo\n- Diffusione di informazioni false\n\n**Obblighi emittenti:** lista insider, comunicazione al mercato appena possibile (salvo ritardo giustificato).` },
+      ]},
+      { id:"A5", materia:"A", titolo:"Antiriciclaggio (AML)", sezioni:[
+        { titolo:"D.Lgs. 231/2007 — Misure Obbligatorie", contenuto:`**Il CF autonomo è soggetto obbligato AML.**\n\n**1. ADEGUATA VERIFICA DELLA CLIENTELA (KYC)**\n- Identificazione e verifica del cliente (documento valido)\n- Identificazione del titolare effettivo (chi controlla realmente il cliente)\n- Comprensione della natura e scopo del rapporto\n- Monitoraggio continuo\n\n**Titolare effettivo:** persona fisica che in ultima istanza possiede/controlla il cliente.\nPer persone giuridiche: chi detiene/controlla >25% del capitale.\n\n**2. SOS (Segnalazione di Operazione Sospetta)**\nA chi: UIF (Unità di Informazione Finanziaria per l'Italia, presso Banca d'Italia).\nQuando: sospetto che l'operazione sia collegata a riciclaggio o finanziamento del terrorismo.\nDIVIETO di tipping-off: non informare il cliente.\n\n**3. CONSERVAZIONE DOCUMENTI**\n10 anni dalla cessazione del rapporto (non 5 — errore tipico).` },
+        { titolo:"Adeguata Verifica — Livelli di Rischio", contenuto:`**VERIFICA SEMPLIFICATA** (rischio basso)\nClienti con basso profilo: enti pubblici, banche europee vigilate. Verifica ridotta ma non assente.\n\n**VERIFICA ORDINARIA** (rischio normale)\nStandard per la maggior parte dei clienti.\n\n**VERIFICA RAFFORZATA** (rischio alto — obbligatoria per):\n- PEP (Persone Politicamente Esposte): politici, alti funzionari pubblici, familiari stretti\n- Clienti di paesi ad alto rischio (lista FATF)\n- Operazioni complesse o inusuali\n- Rapporti a distanza (non-face-to-face)\n\n**PEP:** rimangono PEP per 12 mesi dalla cessazione della carica. Inclusi familiari stretti e soggetti notoriamente vicini.\n\n**Approccio risk-based:** il livello di verifica dipende dal rischio di riciclaggio valutato caso per caso.` },
+      ]},
+      { id:"B1", materia:"B", titolo:"Matematica Finanziaria", sezioni:[
+        { titolo:"Capitalizzazione Semplice e Composta", contenuto:`**CAPITALIZZAZIONE SEMPLICE** (breve termine)\nMontante: M = C × (1 + i × t)\nInteresse: I = C × i × t\nUsata per: operazioni <1 anno, mercato monetario, BOT.\n\n**CAPITALIZZAZIONE COMPOSTA** (medio-lungo termine)\nMontante: M = C × (1 + i)^t\nValore attuale: C = M / (1 + i)^t\n\n**EQUIVALENZA DEI TASSI (comp.):**\ni_k = (1 + i_annuo)^(1/k) - 1\n\nEsempio: i_annuo = 10% → i_semestrale = (1.10)^0.5 - 1 = 4.88% (NON 5%)\nL'errore classico è dividere per 2 → 5%, che vale solo per cap. semplice.` },
+        { titolo:"Duration e Convessità", contenuto:`**DURATION DI MACAULAY**\nD = Σ [t × VA(CF_t)] / P\nMisura la durata media ponderata dei flussi di cassa.\n\nProprietà:\n- Zero coupon: Duration = Scadenza\n- Con cedole: Duration < Scadenza\n- Aumenta con la scadenza\n- Diminuisce all'aumentare del tasso cedolare e dei tassi di mercato\n\n**DURATION MODIFICATA**\nD_mod = D_Macaulay / (1 + y)\nMisura la sensibilità del prezzo al variare dei tassi.\n\nRelazione prezzo-tasso: ΔP/P ≈ -D_mod × Δy\nEsempio: D_mod = 5, tassi +1% → prezzo -5% (circa)\n\n**CONVESSITÀ**\nCorregge l'approssimazione lineare della duration. I prezzi obbligazionari calano MENO di quanto previsto dalla duration quando i tassi salgono. La convessità è sempre desiderabile per l'investitore.` },
+        { titolo:"Rendite e Ammortamento", contenuto:`**RENDITA POSTICIPATA** (flussi a fine periodo)\nVA = R × [1 - (1+i)^(-n)] / i\nVF = R × [(1+i)^n - 1] / i\n\n**RENDITA ANTICIPATA** (flussi a inizio periodo)\nVA_ant = VA_post × (1 + i)\n\n**RENDITA PERPETUA**\nVA = R / i\n\n**AMMORTAMENTO FRANCESE** (rata costante)\nRata: R = C × i / [1-(1+i)^(-n)]\nQuota interessi decrescente, quota capitale crescente.\n\n**AMMORTAMENTO ITALIANO** (quota capitale costante)\nQuota capitale = C/n (costante)\nRata decrescente nel tempo.` },
+        { titolo:"Misure di Rendimento", contenuto:`**TIR (IRR):** tasso che eguaglia valore attuale entrate e uscite. Calcolato per interpolazione.\n\n**TWRR (Time-Weighted Rate of Return)**\nElimina l'impatto dei flussi del cliente. Misura la bravura del GESTORE.\n(1 + TWRR) = (1 + r1) × (1 + r2) × ... × (1 + rn)\nUnica misura corretta per confrontare gestori diversi.\n\n**MWRR (Money-Weighted Rate of Return)**\nEquivalente al TIR. Pesa i rendimenti in base ai capitali nel tempo.\nDipende dal timing dei flussi del cliente.\nMisura la performance dell'INVESTITORE (non del gestore).\n\n**Differenza chiave:** TWRR = gestore, MWRR = investitore.` },
+      ]},
+      { id:"B2", materia:"B", titolo:"Strumenti Finanziari", sezioni:[
+        { titolo:"Obbligazioni — Tipologie e Pricing", contenuto:`**TIPOLOGIE:**\n- Zero coupon: nessuna cedola, emesse sotto la pari\n- Tasso fisso (plain vanilla): cedola periodica fissa\n- Tasso variabile (floater): cedola indicizzata (Euribor + spread)\n- Indicizzate all'inflazione: cedola e/o capitale legati all'inflazione (BTP Italia, BTP€i)\n- Convertibili: possibilità di conversione in azioni\n- Subordinate: in default rimborsate dopo i senior (AT1, T2, SNP)\n\n**PRICING:** Prezzo = Σ CF_t / (1+y)^t\nRelazione INVERSA prezzo-rendimento: tassi salgono → prezzo scende.\n\n**Rating:** AAA (massimo) → D (default). Investment grade: da AAA a BBB-. High yield: BB+ e inferiore.\n\n**Spread di credito:** rendimento aggiuntivo vs risk-free per remunerare il rischio di default.` },
+        { titolo:"ETF — Struttura e Costi", contenuto:`**Struttura:** fondo indicizzato quotato in Borsa.\n- Replicazione fisica: acquisto diretto titoli dell'indice\n- Replicazione sintetica: swap per replicare performance (rischio controparte)\n\n**Metriche:**\n- TER (Total Expense Ratio): costo totale annuo (es. 0.05% - 0.50%)\n- Tracking Error: deviazione std della differenza ETF vs indice\n- Tracking Difference: differenza cumulata ETF vs indice su un periodo\n\n**Confronto con fondi attivi:** TER molto più basso (0.05-0.50% vs 1.5-2.5%). Trasparenza elevata (portafoglio pubblicato daily). Trading infragiornaliero.\n\n**Tipologie:** azionari, obbligazionari, settoriali, tematici, Smart Beta, ETC (materie prime), ETN.` },
+        { titolo:"Derivati — Futures, Opzioni, Swap", contenuto:`**FUTURES:** contratto standardizzato su mercati regolamentati. Obbligo di comprare/vendere a prezzo predeterminato. Margini giornalieri (marking to market).\n\n**OPZIONI:**\n- Call: diritto di COMPRARE al prezzo strike\n- Put: diritto di VENDERE al prezzo strike\n- Premio: costo pagato dall'acquirente al venditore\n- Europea: solo a scadenza | Americana: in qualsiasi momento\n\n**Greche:**\n- Delta: variazione prezzo opzione per variazione unitaria sottostante (0-1 per call, -1-0 per put)\n- Gamma: variazione del delta\n- Theta: erosione del valore temporale (negativo per l'acquirente)\n- Vega: sensibilità alla volatilità del sottostante\n\n**SWAP:** contratto OTC per scambiare flussi futuri.\n- IRS (Interest Rate Swap): fisso vs variabile — il più comune\n- CDS (Credit Default Swap): protezione dal rischio di credito` },
+      ]},
+      { id:"B3", materia:"B", titolo:"Pianificazione e Asset Allocation", sezioni:[
+        { titolo:"Markowitz e Frontiera Efficiente", contenuto:`**Portafoglio efficiente:** massimizza il rendimento per un dato livello di rischio (o minimizza il rischio per un dato rendimento).\n\n**Rischio totale = Rischio sistematico + Rischio specifico**\n- Sistematico (market risk): NON eliminabile con diversificazione\n- Specifico (idiosyncratic): eliminabile con diversificazione\n\nCon 20-30 titoli non correlati si elimina quasi tutto il rischio specifico.\n\n**Correlazione:** beneficio massimo con ρ bassa o negativa.\nFormula varianza portafoglio 2 asset:\nσ²_p = w²_A×σ²_A + w²_B×σ²_B + 2×w_A×w_B×σ_A×σ_B×ρ_AB\n\n**CML (Capital Market Line):** con attività risk-free, la frontiera diventa la CML:\nE(Rp) = Rf + [E(Rm)-Rf]/σm × σp\nIl portafoglio ottimale = tangente CML-frontiera efficiente = portafoglio di mercato.` },
+        { titolo:"CAPM e Misure di Performance", contenuto:`**CAPM:**\nE(Ri) = Rf + βi × [E(Rm) - Rf]\n\nBeta:\n- β=1: si muove come il mercato\n- β>1: amplifica i movimenti (aggressivo)\n- β<1: attenua i movimenti (difensivo)\n- β<0: direzione opposta al mercato\n\n**SML:** titoli sopra = sottovalutati | sotto = sopravvalutati\n\n**MISURE DI PERFORMANCE:**\n- **Sharpe Ratio** = (Rp-Rf)/σp → rendimento per unità di rischio TOTALE\n- **Treynor Ratio** = (Rp-Rf)/βp → rendimento per unità di rischio SISTEMATICO\n- **Alpha di Jensen** = Rp - [Rf+βp×(Rm-Rf)] → valore aggiunto del gestore vs CAPM\n- **Information Ratio** = (Rp-Rb)/TE → efficienza della gestione attiva\n\nEsempio Sharpe: Rp=10%, Rf=2%, σp=15% → Sharpe=(10-2)/15=0.533` },
+      ]},
+      { id:"B4", materia:"B", titolo:"Finanza Comportamentale", sezioni:[
+        { titolo:"Euristiche e Bias Cognitivi", contenuto:`**EURISTICHE** (scorciatoie mentali):\n- **Ancoraggio:** riferimento eccessivo a un valore iniziale nelle decisioni future. Es: il prezzo di acquisto come riferimento per vendere.\n- **Disponibilità:** stimare la probabilità di un evento in base alla facilità con cui vengono in mente esempi. Es: sopravvalutare rischio di volare dopo un incidente aereo.\n- **Rappresentatività:** giudicare in base alla somiglianza con un prototipo. Es: ritenere un titolo "buono" per il brand dell'azienda.\n\n**BIAS:**\n- **Overconfidence:** sopravvalutare le proprie capacità predittive → trading eccessivo, scarsa diversificazione.\n- **Home bias:** preferire mercati domestici → portafoglio sotto-diversificato.\n- **Framing:** le decisioni cambiano in base alla presentazione. Es: "90% sopravvivenza" vs "10% mortalità".\n- **Herding:** seguire la massa → bolle e crolli amplificati.` },
+        { titolo:"Prospect Theory e Avversione alle Perdite", contenuto:`**PROSPECT THEORY** (Kahneman e Tversky, 1979)\nGli individui valutano i risultati come GUADAGNI o PERDITE rispetto a un punto di riferimento (non in valore assoluto).\n\n**AVVERSIONE ALLE PERDITE:**\nIl dolore di una perdita è ~2-2.5x più intenso del piacere di un guadagno equivalente.\nEffetti:\n- Si tengono i titoli in perdita (evitare di "realizzare" la perdita)\n- Si vendono troppo presto i titoli in guadagno\n\n**Funzione di valore:**\n- Concava per i guadagni (avversi al rischio nei guadagni)\n- Convessa per le perdite (propensi al rischio nelle perdite)\n- Asimmetrica: più ripida per le perdite\n\n**MENTAL ACCOUNTING:**\nCompartimentalizzare mentalmente il denaro. Es: spendere senza ritegno i bonus vs risparmiare lo stipendio.\n\n**Per il CF:** aiutare il cliente a riconoscere i bias. Usare il framing in modo appropriato. Implementare processi decisionali strutturati.` },
+      ]},
+      { id:"B5", materia:"B", titolo:"Investimenti ESG e SFDR", sezioni:[
+        { titolo:"ESG — Framework e Strategie", contenuto:`**E — Environmental:** emissioni CO2, carbon footprint, transizione energetica, biodiversità, rischi climatici fisici.\n**S — Social:** condizioni di lavoro, diversità, relazioni con fornitori/comunità, privacy dei dati.\n**G — Governance:** composizione board, remunerazione dirigenti, trasparenza, diritti azionisti minoranza.\n\n**STRATEGIE DI INVESTIMENTO ESG:**\n1. Exclusion (negative screening): escludere settori controversi (tabacco, armi, gambling)\n2. Best-in-class: migliori aziende ESG in ogni settore\n3. ESG Integration: incorporare fattori ESG nell'analisi finanziaria\n4. Engagement: dialogo con le aziende per migliorare pratiche ESG\n5. Impact Investing: impatto sociale/ambientale misurabile\n6. Thematic: tematiche specifiche (rinnovabili, acqua, gender equality)` },
+        { titolo:"SFDR — Classificazione Prodotti", contenuto:`**SFDR (Reg. UE 2019/2088)**\n\n**ARTICOLO 6:** prodotti che NON promuovono caratteristiche ESG. Spiegano solo come i rischi di sostenibilità vengono integrati. Maggioranza dei fondi tradizionali.\n\n**ARTICOLO 8** ("light green"): prodotti che PROMUOVONO caratteristiche ambientali o sociali tra le altre. Devono disclosure su come vengono raggiunte. Esempio: fondo che esclude titoli ad alta intensità carbonica.\n\n**ARTICOLO 9** ("dark green"): obiettivo PRINCIPALE di investimento sostenibile misurabile. Principio DNSH (Do No Significant Harm). Standard più elevati. Esempio: fondo impact investing rinnovabili.\n\n**Tassonomia UE:** sistema di classificazione attività economiche sostenibili. 6 obiettivi ambientali: climate mitigation, adaptation, acqua, economia circolare, biodiversità, inquinamento.` },
+      ]},
+      { id:"C", materia:"C", titolo:"Diritto Tributario — Mercati Finanziari", sezioni:[
+        { titolo:"Regimi Fiscali e Aliquote", contenuto:`**REGIMI FISCALI (persone fisiche non imprenditori):**\n\n**Dichiarativo:** il contribuente dichiara nel 730/Redditi. Flessibile ma oneroso.\n**Risparmio amministrato (default):** l'intermediario applica imposta su ogni operazione. Compensazione limitata allo stesso rapporto.\n**Risparmio gestito (GPM):** l'intermediario tassa annualmente il risultato netto. Compensazione automatica all'interno della gestione.\n\n**ALIQUOTE:**\n- **26%** (regola generale): azioni, obbligazioni corporate, derivati, ETF, conti deposito, PCT\n- **12.5%** (agevolata): Titoli di Stato italiani (BTP, BOT, CCT, BTP Italia), titoli di Stato esteri paesi white list, obbligazioni enti sovranazionali (BEI, BERS)\n\n**ATTENZIONE:** l'errore più comune è applicare il 26% ai BTP. Il tasso è 12.5%.` },
+        { titolo:"Redditi di Capitale vs Redditi Diversi", contenuto:`**Distinzione fondamentale:** NON compensabili tra loro.\n\n**REDDITI DI CAPITALE (art. 44 TUIR):**\n- Dividendi, interessi, proventi fondi comuni, rendite polizze vita\n- NON compensabili con minusvalenze\n\n**REDDITI DIVERSI (art. 67 TUIR):**\n- Plusvalenze da cessione azioni/strumenti finanziari, profitti da derivati\n- Compensabili con minusvalenze della stessa categoria\n- Carry forward: 4 anni successivi\n\n**MINUSVALENZE:**\nMinusvalenze su azioni compensano plusvalenze su azioni (non su fondi/ETF — questi sono redditi di capitale!).\n\n**PIR (Piani Individuali di Risparmio):**\nEsenzione totale da imposte su plusvalenze e dividendi se detenuti ≥5 anni.\nLimite: 30.000€/anno, 150.000€ totali.\nInvestimento: ≥70% in strumenti italiani, di cui ≥30% in PMI.` },
+      ]},
+      { id:"D", materia:"D", titolo:"Diritto Previdenziale e Assicurativo", sezioni:[
+        { titolo:"Sistema Previdenziale — 3 Pilastri", contenuto:`**1° PILASTRO — Previdenza pubblica (INPS)**\nSistema a ripartizione: i contributi degli attivi pagano le pensioni correnti.\nMetodo contributivo (post-1996): pensione proporzionale ai contributi versati.\nMetodo retributivo (pre-1995): basato sulla media degli ultimi stipendi.\nMetodo misto (1996-2011): retributivo per anzianità ante-96, contributivo per il resto.\nPensione di vecchiaia: 67 anni + 20 anni di contributi.\n\n**2° PILASTRO — Previdenza complementare**\nFondi pensione negoziali (chiusi): per categoria/settore.\nFondi pensione aperti: per chiunque, gestiti da banche/assicurazioni/SGR.\nPIP (Piani Individuali Pensionistici): contratti assicurativi previdenziali.\nDeducibilità fiscale: fino a 5.164,57€ annui.\n\n**TFR:** Accantonamento = retribuzione lorda / 13.5. Destinazione: azienda (<50 dipendenti) o fondo pensione (silenzio-assenso → fondo pensione/INPS).\n\n**3° PILASTRO — Risparmio individuale:** senza vantaggi fiscali previdenziali specifici.` },
+        { titolo:"Polizze Vita — Tipologie", contenuto:`**RAMO I** (vita tradizionale — gestione separata)\nRendimento garantito minimo + partecipazione agli utili. Investito in obbligazioni/titoli sicuri. Basso rischio per l'assicurato. Il rischio è dell'assicuratore.\n\n**RAMO III** (unit-linked)\nPrestazione collegata a valore di quote OICR. Il rischio finanziario è a carico dell'ASSICURATO. Nessun rendimento garantito. KID obbligatorio (prodotto PRIIPS). Molto più volatile del Ramo I.\n\n**RAMO V** (capitalizzazione)\nContratto a risparmio senza componente demografica (no copertura vita/morte). Rendimento legato a gestione separata o indici.\n\n**Index-linked:** prestazione indicizzata a un indice (es. Eurostoxx 50). Spesso con protezione del capitale a scadenza.\n\n**Vantaggi legali/fiscali polizze vita:** improcedibilità dai creditori (con limiti), non rientrano nell'asse ereditario (con limiti), beneficiario designato nel contratto.` },
+      ]},
+      { id:"E", materia:"E", titolo:"Diritto Privato e Commerciale", sezioni:[
+        { titolo:"Contratti e Garanzie", contenuto:`**MANDATO (art. 1703 CC):** il mandatario compie atti giuridici per conto del mandante.\n- Con rappresentanza: effetti direttamente nella sfera del mandante\n- Senza rappresentanza: mandatario agisce in nome proprio, poi trasferisce\nRilevante: il CF abilitato all'offerta fuori sede opera con mandato dell'intermediario.\n\n**DEPOSITO BANCARIO:** deposito irregolare. Il denaro diventa proprietà della banca, obbligo di restituire il tantundem (stesso importo, non stesso denaro).\n\n**PEGNO (art. 2784 CC):** garanzia reale su bene mobile. Il creditore pignoratizio si soddisfa sul bene in caso di inadempimento. Pegno su titoli: molto usato per garanzie su finanziamenti.\n\n**IPOTECA (art. 2808 CC):** garanzia reale su bene immobile. Caratteristiche: specialità, accessorietà, indivisibilità.` },
+        { titolo:"Regimi Patrimoniali e Successione", contenuto:`**COMUNIONE LEGALE (default)**\nBeni acquistati durante il matrimonio → entrambi in parti uguali.\nEccezioni (beni personali): beni pre-matrimoniali, EREDITÀ E DONAZIONI, beni d'uso personale, strumenti professionali.\n\n**SEPARAZIONE DEI BENI** (atto notarile)\nOgni coniuge è proprietario esclusivo dei propri beni.\n\n**SUCCESSIONE LEGITTIMA (senza testamento):**\nConiuge: 1/2 se ci sono figli. Figli: 1/2 da dividere equamente.\n\n**LEGITTIMA (quota riservata per legge — non eliminabile dal testamento):**\nEredi necessari: coniuge, figli, ascendenti (se no figli).\nIl testatore dispone liberamente solo della "quota disponibile".\n\n**Relevance per il CF:** fondamentale per la pianificazione patrimoniale e successoria del cliente (trasmissione intergenerazionale del patrimonio).` },
+      ]},
+    ];
+
+    // ─── QUIZ ────────────────────────────────────────────────────────────────────
+    const QUIZ = [
+      { id:1, mat:"A", blocco:"A1", q:"Quale delle seguenti NON è un servizio di investimento MiFID II?", opts:["Consulenza in materia di investimenti","Gestione di portafogli","Vendita di conti correnti bancari","Esecuzione di ordini per conto dei clienti"], ok:2, why:"La vendita di conti correnti è un prodotto bancario, non uno strumento finanziario MiFID. I servizi di investimento riguardano strumenti finanziari (azioni, obbligazioni, derivati, fondi). Distinzione fondamentale: bancario ≠ finanziario ai fini MiFID." },
+      { id:2, mat:"A", blocco:"A1", q:"La valutazione di ADEGUATEZZA è obbligatoria per quale servizio?", opts:["Ricezione e trasmissione di ordini","Esecuzione di ordini","Consulenza in materia di investimenti","Collocamento senza garanzia"], ok:2, why:"L'adeguatezza (suitability) è obbligatoria solo per consulenza e gestione portafogli. Per RTO ed esecuzione ordini si applica solo l'appropriatezza (conoscenza/esperienza). Differenza chiave: adeguatezza è vincolante, appropriatezza è solo un avviso." },
+      { id:3, mat:"A", blocco:"A2", q:"Il Consulente Finanziario Autonomo può ricevere:", opts:["Retrocessioni dai produttori","Commissioni di collocamento","Solo la parcella dal cliente","Incentivi non monetari di valore non significativo"], ok:2, why:"Il CF autonomo può ricevere SOLO la parcella dal cliente. Divieto assoluto di retrocessioni, commissioni e qualsiasi beneficio da terzi. Qualsiasi beneficio ricevuto va restituito al cliente. Questo è il pilastro dell'indipendenza." },
+      { id:4, mat:"A", blocco:"A2", q:"Qual è il periodo MINIMO di sospensione dall'albo OCF?", opts:["1 giorno","1 mese","3 mesi","6 mesi"], ok:0, why:"Trabocchetto classico: la sospensione va da 1 GIORNO a 1 anno — non da 1 mese come si potrebbe pensare. Le sanzioni OCF in ordine crescente: richiamo scritto → censura → sospensione (1 giorno - 1 anno) → radiazione." },
+      { id:5, mat:"A", blocco:"A3", q:"La regola '5/10/40' dei fondi UCITS stabilisce che:", opts:["Max 5% in un emittente","Max 10% in un emittente, con gli >5% che non superano il 40% totale","Max 40% in titoli di Stato","Max 5 emittenti per portafoglio"], ok:1, why:"La regola 5/10/40: max 10% in un singolo emittente; tutti gli emittenti in cui si è investito più del 5% non possono superare complessivamente il 40% del portafoglio. È un vincolo di diversificazione obbligatoria per i fondi UCITS." },
+      { id:6, mat:"A", blocco:"A4", q:"Quale fattispecie NON configura manipolazione di mercato (MAR)?", opts:["Wash trading","Acquistare un'azione per analisi fondamentale","Spoofing","Diffusione di informazioni false"], ok:1, why:"Acquistare un titolo sulla base di analisi fondamentale è legale — è la base del funzionamento dei mercati. La manipolazione richiede dolo specifico di influenzare artificialmente il prezzo. Wash trading, spoofing e diffusione di info false sono manipolazione tipica." },
+      { id:7, mat:"A", blocco:"A5", q:"La SOS (Segnalazione di Operazione Sospetta) va inviata:", opts:["Alla Guardia di Finanza","Alla Consob","All'UIF presso Banca d'Italia","Al Nucleo Speciale Polizia Valutaria"], ok:2, why:"La SOS va all'UIF (Unità di Informazione Finanziaria per l'Italia), operativa presso Banca d'Italia. Non va alla GdF (che svolge accertamenti successivi) né alla Consob (vigilanza sui mercati). La SOS è confidenziale: divieto assoluto di tipping-off." },
+      { id:8, mat:"A", blocco:"A5", q:"Per quanto tempo si conservano i documenti AML dalla cessazione del rapporto?", opts:["3 anni","5 anni","7 anni","10 anni"], ok:3, why:"Il D.Lgs. 231/2007 prevede conservazione per 10 anni dalla cessazione del rapporto. Errore comune: rispondere 5 anni (termine di altre normative). 10 anni è il termine corretto per AML. Dettaglio preciso che l'esame testa spesso." },
+      { id:9, mat:"B", blocco:"B1", q:"Il tasso equivalente mensile a un tasso annuo effettivo del 12% (capitalizzazione composta) è:", opts:["1,000%","0,949%","1,041%","0,795%"], ok:1, why:"i_mensile = (1+0.12)^(1/12) - 1 = (1.12)^0.0833 - 1 ≈ 0.949%. Errore classico: dividere per 12 → 1%, che vale solo per cap. semplice. In cap. composta si usa la radice n-esima. Il risultato è sempre leggermente inferiore alla divisione semplice." },
+      { id:10, mat:"B", blocco:"B1", q:"Un'obbligazione ha Duration Modificata di 5. I tassi salgono di 50 punti base. La variazione attesa del prezzo è:", opts:["+2,50%","-2,50%","+5,00%","-5,00%"], ok:1, why:"ΔP/P ≈ -D_mod × Δy = -5 × 0.005 = -0.025 = -2.50%. Il segno è NEGATIVO: tassi salgono → prezzo scende. 50 punti base = 0.50% = 0.005 in decimale. Errore comune: usare 50 invece di 0.005, ottenendo -250%." },
+      { id:11, mat:"B", blocco:"B2", q:"La TWRR è preferita alla MWRR per:", opts:["Valutare la performance dell'investitore","Confrontare gestori diversi","Calcolare il rendimento di un immobile","Misurare il rendimento di un cliente con flussi irregolari"], ok:1, why:"TWRR elimina l'impatto dei flussi del cliente, misurando solo la bravura del GESTORE. Due gestori con TWRR uguale hanno uguale bravura anche se i loro clienti hanno investito in momenti diversi. MWRR (= TIR) misura invece il rendimento effettivo dell'INVESTITORE." },
+      { id:12, mat:"B", blocco:"B3", q:"Titolo con β=1.5, Rf=2%, E(Rm)=8%. Il rendimento atteso CAPM è:", opts:["9%","10%","11%","12%"], ok:2, why:"E(Ri) = Rf + β × [E(Rm)-Rf] = 2% + 1.5 × (8%-2%) = 2% + 1.5×6% = 2% + 9% = 11%. Errore tipico: moltiplicare β per il rendimento totale del mercato (8%) → 12%. Il beta amplifica il PREMIO per il rischio (6%), non il rendimento totale." },
+      { id:13, mat:"B", blocco:"B3", q:"Portafoglio: Rp=10%, Rf=2%, σp=15%. Lo Sharpe Ratio è:", opts:["0,67","0,53","0,80","0,48"], ok:1, why:"Sharpe = (Rp-Rf)/σp = (10%-2%)/15% = 8%/15% = 0.533. Non 0.67 (errore con Rf=0). Non 0.80 (errore con denominatore 10). Lo Sharpe misura il rendimento in eccesso per unità di rischio TOTALE (volatilità). Treynor usa beta (rischio sistematico)." },
+      { id:14, mat:"B", blocco:"B4", q:"L'effetto di 'ancoraggio' si manifesta quando l'investitore:", opts:["Vende troppo presto i titoli in guadagno","Si basa eccessivamente sul prezzo di acquisto per decidere se vendere","Investe principalmente in titoli del proprio paese","Segue le scelte della massa"], ok:1, why:"L'ancoraggio = riferimento eccessivo a un valore iniziale. Il prezzo di acquisto diventa l'ancora: non si vende finché il prezzo non torna all'ancora, indipendentemente dal fair value attuale. Porta a tenere i perdenti troppo a lungo. Attenzione: il home bias è un bias diverso (risposta C)." },
+      { id:15, mat:"B", blocco:"B5", q:"Un fondo 'Articolo 9' ai sensi della SFDR:", opts:["Promuove caratteristiche ESG tra le sue caratteristiche","Ha come obiettivo principale un investimento sostenibile misurabile","Esclude solo i settori più controversi","Non tiene conto di criteri ESG"], ok:1, why:"Art.9 = 'dark green': l'obiettivo PRINCIPALE è un investimento sostenibile misurabile. Non si limita a promuovere caratteristiche ESG (Art.8) o escludere settori. Deve rispettare DNSH (Do No Significant Harm) e dimostrare impatto con metriche precise. È lo standard più alto SFDR." },
+      { id:16, mat:"C", blocco:"C", q:"L'aliquota dell'imposta sostitutiva applicabile agli interessi dei BTP italiani è:", opts:["26%","12,5%","20%","23%"], ok:1, why:"BTP, BOT, CCT, BTP Italia e tutti i titoli di Stato italiani sono tassati al 12.5%, non al 26%. Aliquota agevolata per incentivare l'investimento nel debito pubblico. Quasi tutti gli altri strumenti (azioni, obbligazioni corporate, ETF) scontano il 26%." },
+      { id:17, mat:"C", blocco:"C", q:"Nel risparmio amministrato, le minusvalenze:", opts:["Compensano qualsiasi reddito finanziario nei 4 anni successivi","Compensano le plusvalenze successive nello stesso rapporto entro 4 anni","Non sono mai compensabili","Compensano automaticamente i dividendi"], ok:1, why:"Nel risparmio amministrato la compensazione è limitata al MEDESIMO rapporto (stesso dossier titoli) entro 4 anni. Non si possono compensare minusvalenze di un conto con plusvalenze di un altro, né con dividendi (redditi di capitale, non redditi diversi). Limite principale del risparmio amministrato vs dichiarativo." },
+      { id:18, mat:"D", blocco:"D", q:"I contributi a un fondo pensione complementare sono deducibili fino a:", opts:["2.582,28€ annui","5.164,57€ annui","Il 10% del reddito imponibile","Senza limiti per dipendenti"], ok:1, why:"Il limite di deducibilità è 5.164,57€ annui dal reddito complessivo (include contributi del lavoratore + eventuale contributo datoriale). Al momento dell'erogazione la prestazione è tassata con aliquota dal 15% al 9% in base agli anni di iscrizione al fondo." },
+      { id:19, mat:"D", blocco:"D", q:"Una polizza vita Ramo III (unit-linked) si differenzia dal Ramo I perché:", opts:["Ha sempre un rendimento garantito minimo","Il rischio finanziario è a carico dell'assicurato","Investe solo in titoli di Stato","Non è soggetta agli obblighi KID/PRIIPS"], ok:1, why:"Nelle polizze Ramo III il capitale è collegato a fondi interni o UCITS: se i fondi perdono valore, il cliente perde. Nessun rendimento garantito (a differenza del Ramo I dove il rischio è dell'assicuratore). Per questo sono prodotti PRIIPS e richiedono KID." },
+      { id:20, mat:"E", blocco:"E", q:"Nel regime di comunione legale, quale bene è ESCLUSO dalla comunione?", opts:["Appartamento acquistato dopo il matrimonio","Auto acquistata durante il matrimonio","Eredità ricevuta dopo il matrimonio","Conto corrente aperto durante il matrimonio"], ok:2, why:"L'eredità ricevuta durante il matrimonio è bene PERSONALE, escluso per legge dalla comunione (art. 179 CC). Stesso per le donazioni ricevute personalmente. Invece, beni acquistati con denaro comune durante il matrimonio entrano in comunione." },
+    ];
+
+    const MATERIE = { A:"Diritto", B:"Matematica", C:"Fiscalità", D:"Previdenza", E:"Diritto Priv." };
+    const MC = {
+      A:{ bg:"bg-blue-50", bd:"border-blue-200", badge:"bg-blue-100 text-blue-700", hdr:"bg-blue-800", txt:"text-blue-700" },
+      B:{ bg:"bg-green-50", bd:"border-green-200", badge:"bg-green-100 text-green-700", hdr:"bg-green-700", txt:"text-green-700" },
+      C:{ bg:"bg-orange-50", bd:"border-orange-200", badge:"bg-orange-100 text-orange-700", hdr:"bg-orange-600", txt:"text-orange-600" },
+      D:{ bg:"bg-purple-50", bd:"border-purple-200", badge:"bg-purple-100 text-purple-700", hdr:"bg-purple-700", txt:"text-purple-700" },
+      E:{ bg:"bg-red-50", bd:"border-red-200", badge:"bg-red-100 text-red-700", hdr:"bg-red-700", txt:"text-red-700" },
+    };
+    const EXAM_DATE = new Date("2026-09-20");
+
+    // ─── SUPABASE HELPERS ─────────────────────────────────────────────────────────
+    async function saveSession(sessionData) {
+      const { data, error } = await supabase.from("quiz_sessions").insert([sessionData]);
+      return { data, error };
+    }
+    async function loadSessions() {
+      const { data, error } = await supabase
+        .from("quiz_sessions")
+        .select("*")
+        .order("created_at", { ascending: true });
+      return { data: data || [], error };
+    }
+
+    // ─── MARKDOWN ────────────────────────────────────────────────────────────────
+    function Md({ text }) {
+      return text.split("\n").map((line, i) => {
+        if (!line) return <div key={i} className="h-2" />;
+        const parts = line.split(/\*\*(.+?)\*\*/g);
+        return (
+          <div key={i} className={line.startsWith("- ") ? "ml-3 flex gap-1.5 items-start" : ""}>
+            {line.startsWith("- ") && <span className="text-gray-400 mt-0.5 shrink-0">•</span>}
+            <span>{parts.map((p, j) => j % 2 === 1 ? <strong key={j}>{p}</strong> : <span key={j}>{p.replace(/^- /, "")}</span>)}</span>
+          </div>
+        );
+      });
+    }
+
+    // ─── PROIEZIONE ──────────────────────────────────────────────────────────────
+    function calcProiezione(sessions) {
+      if (sessions.length < 2) return null;
+      const recent = sessions.slice(-Math.min(10, sessions.length));
+      const scores = recent.map(s => s.score_pct);
+      const avg = scores.reduce((a,b)=>a+b,0)/scores.length;
+      const trend = scores.length >= 3
+        ? (scores.slice(-3).reduce((a,b)=>a+b,0)/3) - (scores.slice(0,3).reduce((a,b)=>a+b,0)/3)
+        : 0;
+      const oggi = new Date();
+      const giorniAll = Math.max(1, Math.round((EXAM_DATE - oggi)/(1000*60*60*24)));
+      const settimaneAll = giorniAll / 7;
+      const proiettato = Math.min(100, Math.max(0, avg + trend * Math.min(settimaneAll, 4)));
+      const prob = proiettato >= 85 ? 95 : proiettato >= 80 ? 80 : proiettato >= 75 ? 55 : proiettato >= 70 ? 30 : 10;
+      return { avg: Math.round(avg*10)/10, trend: Math.round(trend*10)/10, proiettato: Math.round(proiettato*10)/10, prob, giorniAll };
+    }
+
+    // ─── APP ─────────────────────────────────────────────────────────────────────
+    export default function App() {
+      const [view, setView] = useState("home");
+      const [selModulo, setSelModulo] = useState(null);
+      const [selSez, setSelSez] = useState(0);
+      const [qFiltro, setQFiltro] = useState("all");
+      const [qIdx, setQIdx] = useState(0);
+      const [qRisp, setQRisp] = useState(null);
+      const [sessioneCorrente, setSessioneCorrente] = useState([]);
+      const [sessions, setSessions] = useState([]);
+      const [loading, setLoading] = useState(false);
+      const [dbOk, setDbOk] = useState(null);
+
+      const qList = qFiltro === "all" ? QUIZ : QUIZ.filter(q => q.mat === qFiltro);
+      const quizIdx = qIdx % qList.length;
+      const quiz = qList[quizIdx];
+
+      useEffect(() => {
+        checkDbAndLoad();
+      }, []);
+
+      async function checkDbAndLoad() {
+        if (SUPABASE_URL.includes("YOUR_PROJECT")) { setDbOk(false); return; }
+        const { data, error } = await loadSessions();
+        if (!error) { setSessions(data); setDbOk(true); }
+        else setDbOk(false);
+      }
+
+      function rispondi(i) {
+        if (qRisp !== null) return;
+        setQRisp(i);
+        const ok = i === quiz.ok;
+        setSessioneCorrente(s => [...s, { quiz_id: quiz.id, materia: quiz.mat, blocco: quiz.blocco, risposta: i, corretta: ok }]);
+      }
+
+      async function prossimoQuiz() {
+        setQRisp(null);
+        setQIdx(n => n + 1);
+      }
+
+      async function salvaSessione() {
+        if (sessioneCorrente.length === 0) return;
+        const totale = sessioneCorrente.length;
+        const corrette = sessioneCorrente.filter(r => r.corretta).length;
+        const score_pct = Math.round(corrette / totale * 100);
+        const per_materia = {};
+        sessioneCorrente.forEach(r => {
+          if (!per_materia[r.materia]) per_materia[r.materia] = { corrette: 0, totale: 0 };
+          per_materia[r.materia].totale++;
+          if (r.corretta) per_materia[r.materia].corrette++;
+        });
+        const sessionData = {
+          device_id: DEVICE_ID,
+          filtro_materia: qFiltro,
+          totale_domande: totale,
+          corrette,
+          score_pct,
+          per_materia,
+          dettaglio: sessioneCorrente,
+          created_at: new Date().toISOString()
+        };
+        if (dbOk) {
+          setLoading(true);
+          const { error } = await saveSession(sessionData);
+          if (!error) {
+            const { data } = await loadSessions();
+            if (data) setSessions(data);
+          }
+          setLoading(false);
+        } else {
+          // fallback localStorage
+          const local = JSON.parse(localStorage.getItem("ocf_sessions") || "[]");
+          local.push(sessionData);
+          localStorage.setItem("ocf_sessions", JSON.stringify(local));
+          setSessions(local);
+        }
+        setSessioneCorrente([]);
+        setView("storico");
+      }
+
+      const proj = calcProiezione(sessions);
+      const chartData = sessions.slice(-20).map((s, i) => ({
+        n: i + 1,
+        score: s.score_pct,
+        data: s.created_at ? new Date(s.created_at).toLocaleDateString("it-IT", { month:"short", day:"numeric" }) : `Sess. ${i+1}`,
+      }));
+
+      const scoreCurrent = sessioneCorrente.length > 0
+        ? Math.round(sessioneCorrente.filter(r => r.corretta).length / sessioneCorrente.length * 100)
+        : null;
+
+      return (
+        <div className="min-h-screen bg-slate-50">
+          {/* HEADER */}
+          <div className="bg-blue-900 text-white shadow-lg sticky top-0 z-50">
+            <div className="max-w-5xl mx-auto px-3 py-3 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-xs text-blue-300 tracking-widest hidden sm:block">LUMIS FINANCE</div>
+                <div className="font-bold text-base sm:text-lg leading-tight">OCF Studio</div>
+              </div>
+              <nav className="flex gap-1 flex-wrap justify-end">
+                {[["home","🏠"],["teoria","📚"],["quiz","❓"],["storico","📊"],["piano","📅"]].map(([v,l]) => (
+                  <button key={v} onClick={() => setView(v)}
+                    className={`px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm font-medium transition-colors ${view===v ? "bg-white text-blue-900" : "bg-blue-800 text-white hover:bg-blue-700"}`}>
+                    <span>{l}</span><span className="hidden sm:inline"> {v.charAt(0).toUpperCase()+v.slice(1)}</span>
+                  </button>
+                ))}
+              </nav>
+            </div>
+          </div>
+
+          <div className="max-w-5xl mx-auto px-3 py-4">
+
+            {/* ─── HOME ─────────────────────────────────────────── */}
+            {view === "home" && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[["60","domande esame"],["80/100","punteggio min"],["5.000","quiz in banca dati"],[proj ? proj.giorniAll+"gg" : "—","all'esame"]].map(([v,l],i) => (
+                    <div key={i} className="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
+                      <div className={`text-2xl font-bold ${i===3&&proj&&proj.giorniAll<30?"text-red-600":i===3?"text-orange-600":"text-blue-700"}`}>{v}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{l}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {dbOk === false && (
+                  <div className="bg-amber-50 border border-amber-300 rounded-xl p-4">
+                    <div className="font-semibold text-amber-800 mb-1">⚙️ Database non configurato</div>
+                    <div className="text-sm text-amber-700">I dati vengono salvati localmente (solo su questo dispositivo). Per la sincronizzazione multi-dispositivo configura Supabase nel file <code>index.html</code>. Vedi <strong>SETUP.md</strong> per le istruzioni.</div>
+                  </div>
+                )}
+
+                {proj && (
+                  <div className={`rounded-xl border p-4 ${proj.prob >= 80 ? "bg-green-50 border-green-200" : proj.prob >= 55 ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200"}`}>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <div className={`font-bold text-base ${proj.prob >= 80 ? "text-green-800" : proj.prob >= 55 ? "text-amber-800" : "text-red-800"}`}>
+                          Proiezione esame: {proj.prob}% probabilità di successo
+                        </div>
+                        <div className="text-sm text-gray-600">Score medio: <strong>{proj.avg}%</strong> · Trend: <strong>{proj.trend > 0 ? "+" : ""}{proj.trend}%</strong>/settimana · Score proiettato: <strong>{proj.proiettato}%</strong></div>
+                      </div>
+                      <div className={`text-3xl font-black ${proj.prob >= 80 ? "text-green-700" : proj.prob >= 55 ? "text-amber-700" : "text-red-700"}`}>{proj.prob}%</div>
+                    </div>
+                  </div>
+                )}
+
+                {sessions.length > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                    <div className="text-sm font-semibold text-gray-700 mb-3">Andamento Score (ultime {chartData.length} sessioni)</div>
+                    <ResponsiveContainer width="100%" height={160}>
+                      <AreaChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis dataKey="data" tick={{ fontSize: 10 }} />
+                        <YAxis domain={[0,100]} tick={{ fontSize: 10 }} />
+                        <Tooltip formatter={(v) => [v + "%", "Score"]} />
+                        <ReferenceLine y={80} stroke="#ef4444" strokeDasharray="4 4" label={{ value:"Min 80%", position:"right", fontSize:10, fill:"#ef4444" }} />
+                        <Area type="monotone" dataKey="score" stroke="#1d4ed8" fill="#dbeafe" strokeWidth={2} dot={{ fill:"#1d4ed8", r:3 }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => setView("teoria")} className="bg-blue-800 text-white rounded-xl p-4 text-center font-semibold hover:bg-blue-900 transition-colors text-sm">
+                    📚 Studia la Teoria
+                  </button>
+                  <button onClick={() => setView("quiz")} className="bg-green-700 text-white rounded-xl p-4 text-center font-semibold hover:bg-green-800 transition-colors text-sm">
+                    ❓ Fai i Quiz
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ─── TEORIA ───────────────────────────────────────── */}
+            {view === "teoria" && (
+              <div className="flex gap-3">
+                <div className="w-48 sm:w-56 flex-shrink-0 hidden sm:block">
+                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                    {Object.entries(MATERIE).map(([mat, label]) => {
+                      const c = MC[mat];
+                      const moduli = TEORIA.filter(m => m.materia === mat);
+                      return (
+                        <div key={mat}>
+                          <div className={`${c.hdr} text-white text-xs font-bold px-3 py-2`}>{mat} — {label}</div>
+                          {moduli.map(m => (
+                            <button key={m.id} onClick={() => { setSelModulo(m.id); setSelSez(0); }}
+                              className={`w-full text-left text-xs px-3 py-2 border-b border-gray-100 hover:bg-gray-50 transition-colors ${selModulo===m.id ? "bg-slate-100 font-semibold" : ""}`}>
+                              {m.titolo.split("—")[1]?.trim() || m.titolo}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Mobile selector */}
+                <div className="sm:hidden mb-3 w-full">
+                  <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                    onChange={e => { const m = TEORIA.find(x => x.id === e.target.value); if(m){ setSelModulo(m.id); setSelSez(0); }}}>
+                    <option value="">Seleziona modulo...</option>
+                    {TEORIA.map(m => <option key={m.id} value={m.id}>{m.id} — {m.titolo}</option>)}
+                  </select>
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  {!selModulo ? (
+                    <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 shadow-sm">Seleziona un modulo</div>
+                  ) : (() => {
+                    const m = TEORIA.find(x => x.id === selModulo);
+                    const c = MC[m.materia];
+                    return (
+                      <div className="space-y-3">
+                        <div className={`${c.bg} ${c.bd} border rounded-xl p-3`}>
+                          <span className={`${c.badge} text-xs font-bold px-2 py-0.5 rounded mr-2`}>{m.materia}</span>
+                          <span className="font-bold text-sm text-gray-800">{m.titolo}</span>
+                        </div>
+                        <div className="flex gap-2 flex-wrap">
+                          {m.sezioni.map((s,i) => (
+                            <button key={i} onClick={() => setSelSez(i)}
+                              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${selSez===i ? `${c.hdr} text-white` : `bg-white ${c.bd} text-gray-700 hover:bg-gray-50`}`}>
+                              {s.titolo}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                          <h2 className={`text-base font-bold ${c.txt} mb-3`}>{m.sezioni[selSez].titolo}</h2>
+                          <div className="text-sm text-gray-700 leading-relaxed space-y-1">
+                            <Md text={m.sezioni[selSez].contenuto} />
+                          </div>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <button onClick={() => {
+                            if (selSez > 0) setSelSez(s=>s-1);
+                            else { const idx=TEORIA.findIndex(x=>x.id===selModulo); if(idx>0){setSelModulo(TEORIA[idx-1].id);setSelSez(TEORIA[idx-1].sezioni.length-1);} }
+                          }} className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50">← Prec.</button>
+                          <button onClick={() => { setView("quiz"); setQFiltro(m.materia); setQIdx(0); setQRisp(null); }}
+                            className={`text-xs px-3 py-1.5 rounded-lg ${c.hdr} text-white hover:opacity-90`}>Quiz su {m.materia} →</button>
+                          <button onClick={() => {
+                            if (selSez < m.sezioni.length-1) setSelSez(s=>s+1);
+                            else { const idx=TEORIA.findIndex(x=>x.id===selModulo); if(idx<TEORIA.length-1){setSelModulo(TEORIA[idx+1].id);setSelSez(0);} }
+                          }} className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50">Succ. →</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* ─── QUIZ ─────────────────────────────────────────── */}
+            {view === "quiz" && (
+              <div className="max-w-2xl mx-auto space-y-3">
+                <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm flex flex-wrap gap-2 items-center">
+                  <span className="text-xs text-gray-500 font-medium">Filtra:</span>
+                  {[["all","Tutte"],...Object.entries(MATERIE).map(([k,v])=>[k,k+" — "+v.split(" ")[0]])].map(([k,l]) => (
+                    <button key={k} onClick={() => { setQFiltro(k); setQIdx(0); setQRisp(null); }}
+                      className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${qFiltro===k ? (k==="all"?"bg-gray-800 text-white":`${MC[k]?.hdr||"bg-gray-800"} text-white`) : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm flex items-center gap-3 flex-wrap">
+                  <span className="text-xs text-gray-500">Sessione corrente:</span>
+                  <span className="text-sm font-bold text-green-700">{sessioneCorrente.filter(r=>r.corretta).length} ✅</span>
+                  <span className="text-sm font-bold text-red-600">{sessioneCorrente.filter(r=>!r.corretta).length} ❌</span>
+                  <span className="text-sm font-bold">{sessioneCorrente.length} totali</span>
+                  {scoreCurrent !== null && <span className={`text-sm font-bold ml-auto ${scoreCurrent>=80?"text-green-700":"text-red-600"}`}>{scoreCurrent}%</span>}
+                  {sessioneCorrente.length >= 5 && (
+                    <button onClick={salvaSessione} disabled={loading}
+                      className="ml-auto bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-blue-800 disabled:opacity-50">
+                      {loading ? "Salvo..." : "💾 Salva sessione"}
+                    </button>
+                  )}
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className={`${MC[quiz.mat].hdr} text-white px-4 py-2.5`}>
+                    <div className="text-xs opacity-75">Materia {quiz.mat} · {quiz.blocco} · {quizIdx+1}/{qList.length}</div>
+                  </div>
+                  <div className="p-4 sm:p-5">
+                    <p className="text-gray-800 font-medium text-sm sm:text-base mb-4 leading-relaxed">{quiz.q}</p>
+                    <div className="space-y-2">
+                      {quiz.opts.map((op,i) => {
+                        let cls = "w-full text-left px-3 sm:px-4 py-2.5 rounded-xl border text-sm transition-colors ";
+                        if (qRisp===null) cls += "border-gray-200 bg-gray-50 hover:bg-blue-50 hover:border-blue-300 cursor-pointer";
+                        else if (i===quiz.ok) cls += "border-green-500 bg-green-50 text-green-800 font-semibold";
+                        else if (i===qRisp) cls += "border-red-400 bg-red-50 text-red-800";
+                        else cls += "border-gray-200 bg-gray-50 text-gray-400";
+                        return (
+                          <button key={i} className={cls} onClick={() => rispondi(i)}>
+                            <span className="font-bold mr-2 text-xs">{["A","B","C","D"][i]})</span>
+                            {op}
+                            {qRisp!==null && i===quiz.ok && <span className="ml-1">✅</span>}
+                            {qRisp!==null && i===qRisp && i!==quiz.ok && <span className="ml-1">❌</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {qRisp !== null && (
+                      <div className={`mt-4 p-3 sm:p-4 rounded-xl text-sm leading-relaxed ${qRisp===quiz.ok ? "bg-green-50 border border-green-200 text-green-800" : "bg-red-50 border border-red-200 text-red-800"}`}>
+                        <strong>{qRisp===quiz.ok ? "✅ Corretto!" : "❌ Sbagliato"}</strong>
+                        <div className="mt-1">{quiz.why}</div>
+                      </div>
+                    )}
+                    {qRisp !== null && (
+                      <button onClick={prossimoQuiz} className="mt-3 w-full bg-blue-800 text-white py-2.5 rounded-xl font-medium hover:bg-blue-900 transition-colors text-sm">
+                        Prossima domanda →
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-center">
+                  <button onClick={() => setView("teoria")} className="text-xs text-gray-400 hover:text-gray-600 underline">Torna alla teoria per ripassare</button>
+                </div>
+              </div>
+            )}
+
+            {/* ─── STORICO ──────────────────────────────────────── */}
+            {view === "storico" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-gray-800">Storico Sessioni</h2>
+                  <span className="text-sm text-gray-500">{sessions.length} sessioni registrate</span>
+                </div>
+
+                {sessions.length < 2 ? (
+                  <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 shadow-sm">
+                    Fai almeno 2 sessioni di quiz per vedere i grafici e la proiezione
+                  </div>
+                ) : (
+                  <>
+                    {/* Proiezione */}
+                    {proj && (
+                      <div className={`rounded-xl border p-4 ${proj.prob>=80?"bg-green-50 border-green-200":proj.prob>=55?"bg-amber-50 border-amber-200":"bg-red-50 border-red-200"}`}>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {[["Score medio",proj.avg+"%"],["Trend",`${proj.trend>0?"+":""}${proj.trend}%/sett.`],["Score proiettato",proj.proiettato+"%"],[proj.giorniAll+" giorni all'esame","Probabilità successo"]].map(([l,v],i) => (
+                            <div key={i} className="text-center">
+                              <div className={`text-xl sm:text-2xl font-black ${i===3?proj.prob>=80?"text-green-700":proj.prob>=55?"text-amber-700":"text-red-700":"text-gray-800"}`}>
+                                {i===3 ? proj.prob+"%" : v}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5">{i===3 ? l : l}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 text-xs text-gray-500 text-center">Proiezione basata sulle ultime {Math.min(10, sessions.length)} sessioni · Soglia successo: 80/100 all'esame OCF</div>
+                      </div>
+                    )}
+
+                    {/* Grafico andamento */}
+                    <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                      <div className="text-sm font-semibold text-gray-700 mb-3">📈 Andamento Score nel Tempo</div>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <AreaChart data={chartData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                          <XAxis dataKey="data" tick={{ fontSize: 10 }} />
+                          <YAxis domain={[0,100]} tick={{ fontSize: 10 }} />
+                          <Tooltip formatter={(v) => [v + "%", "Score"]} />
+                          <ReferenceLine y={80} stroke="#ef4444" strokeDasharray="4 4" label={{ value:"Soglia 80%", position:"right", fontSize:10, fill:"#ef4444" }} />
+                          <Area type="monotone" dataKey="score" stroke="#1d4ed8" fill="#dbeafe" strokeWidth={2} dot={{ fill:"#1d4ed8", r:3 }} activeDot={{ r:5 }} />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Score per materia */}
+                    {sessions.length > 0 && (() => {
+                      const mData = Object.entries(MATERIE).map(([mat, label]) => {
+                        const relevant = sessions.flatMap(s => s.dettaglio || []).filter(r => r.materia === mat);
+                        if (relevant.length === 0) return null;
+                        const pct = Math.round(relevant.filter(r=>r.corretta).length / relevant.length * 100);
+                        return { name: mat+" — "+label, pct, mat };
+                      }).filter(Boolean);
+                      return mData.length > 0 ? (
+                        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                          <div className="text-sm font-semibold text-gray-700 mb-3">📊 Score per Materia (tutte le sessioni)</div>
+                          <ResponsiveContainer width="100%" height={160}>
+                            <BarChart data={mData} layout="vertical">
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                              <XAxis type="number" domain={[0,100]} tick={{ fontSize:10 }} />
+                              <YAxis type="category" dataKey="name" tick={{ fontSize:10 }} width={120} />
+                              <Tooltip formatter={(v) => [v + "%", "Score"]} />
+                              <ReferenceLine x={80} stroke="#ef4444" strokeDasharray="4 4" />
+                              <Bar dataKey="pct" fill="#1d4ed8" radius={[0,4,4,0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : null;
+                    })()}
+                  </>
+                )}
+
+                {/* Tabella sessioni */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="bg-gray-800 text-white px-4 py-2.5 text-sm font-semibold">Dettaglio Sessioni</div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="text-left px-3 py-2 text-gray-600 font-medium">#</th>
+                          <th className="text-left px-3 py-2 text-gray-600 font-medium">Data</th>
+                          <th className="text-left px-3 py-2 text-gray-600 font-medium">Filtro</th>
+                          <th className="text-center px-3 py-2 text-gray-600 font-medium">Dom.</th>
+                          <th className="text-center px-3 py-2 text-gray-600 font-medium">✅</th>
+                          <th className="text-center px-3 py-2 text-gray-600 font-medium">Score</th>
+                          <th className="text-left px-3 py-2 text-gray-600 font-medium">Per materia</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...sessions].reverse().map((s, i) => (
+                          <tr key={i} className={`border-b border-gray-100 ${i%2===0?"bg-white":"bg-gray-50"}`}>
+                            <td className="px-3 py-2 text-gray-500">{sessions.length - i}</td>
+                            <td className="px-3 py-2 text-gray-600">{s.created_at ? new Date(s.created_at).toLocaleDateString("it-IT",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "—"}</td>
+                            <td className="px-3 py-2">
+                              <span className={`${s.filtro_materia==="all"?"bg-gray-100 text-gray-700":MC[s.filtro_materia]?.badge||"bg-gray-100"} px-1.5 py-0.5 rounded text-xs font-medium`}>
+                                {s.filtro_materia==="all"?"Tutte":s.filtro_materia}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-center">{s.totale_domande}</td>
+                            <td className="px-3 py-2 text-center text-green-700 font-medium">{s.corrette}</td>
+                            <td className="px-3 py-2 text-center">
+                              <span className={`font-bold ${s.score_pct>=80?"text-green-700":s.score_pct>=70?"text-amber-600":"text-red-600"}`}>{s.score_pct}%</span>
+                            </td>
+                            <td className="px-3 py-2">
+                              {s.per_materia && Object.entries(s.per_materia).map(([mat,d]) => (
+                                <span key={mat} className={`inline-block mr-1 mb-0.5 px-1.5 py-0.5 rounded text-xs ${MC[mat]?.badge||"bg-gray-100"}`}>
+                                  {mat}:{Math.round(d.corrette/d.totale*100)}%
+                                </span>
+                              ))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Dettaglio risposte ultima sessione */}
+                {sessions.length > 0 && sessions[sessions.length-1].dettaglio && (
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="bg-blue-800 text-white px-4 py-2.5 text-sm font-semibold">Dettaglio Risposte — Ultima Sessione</div>
+                    <div className="divide-y divide-gray-100">
+                      {sessions[sessions.length-1].dettaglio.map((r, i) => {
+                        const q = QUIZ.find(x => x.id === r.quiz_id);
+                        return (
+                          <div key={i} className={`px-4 py-3 flex gap-3 items-start ${r.corretta ? "bg-white" : "bg-red-50"}`}>
+                            <span className={`text-base shrink-0 mt-0.5`}>{r.corretta ? "✅" : "❌"}</span>
+                            <div className="min-w-0">
+                              <div className="text-xs text-gray-500 mb-0.5">{r.blocco}</div>
+                              {q && <div className="text-sm text-gray-800 font-medium">{q.q}</div>}
+                              {q && !r.corretta && (
+                                <div className="mt-1 text-xs text-red-700">
+                                  <span className="font-medium">Risposta data:</span> {q.opts[r.risposta]} · <span className="font-medium">Corretta:</span> {q.opts[q.ok]}
+                                  <div className="mt-0.5 text-gray-600">{q.why}</div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ─── PIANO ────────────────────────────────────────── */}
+            {view === "piano" && (
+              <div className="space-y-3">
+                <div className="bg-blue-900 text-white rounded-xl p-4">
+                  <div className="font-bold text-lg">Piano Full-Immersion Agosto 2026</div>
+                  <div className="text-blue-200 text-sm mt-0.5">Target: Sessione IV — Settembre/Ottobre 2026</div>
+                </div>
+                {[
+                  { fase:"Fase 0", periodo:"Luglio 2026", ore:"2-3h/sett.", cls:"bg-blue-50 border-blue-200", badge:"bg-blue-100 text-blue-700",
+                    items:["Iscriversi a Concorsando.it o Mininterno.net (banca dati OCF ufficiale)","Fare 50-100 quiz campione per valutare il livello attuale","Leggere una volta (senza studiare) i titoli di tutte le materie","Setup: PC, connessione, stanza, polizza d'esame da leggere"] },
+                  { fase:"Ago — Sett. 1", periodo:"1-8 agosto", ore:"28-32h", cls:"bg-green-50 border-green-200", badge:"bg-green-100 text-green-700",
+                    items:["B1 — Matematica finanziaria: tassi equivalenti, capitalizzazione, duration, ammortamento, misure rendimento","Quiz intensivo B1 (target >85% corretto)","Schemi riassuntivi con formule principali"] },
+                  { fase:"Ago — Sett. 2", periodo:"9-16 agosto", ore:"28-32h", cls:"bg-green-50 border-green-200", badge:"bg-green-100 text-green-700",
+                    items:["B2 — Strumenti finanziari (obbligazioni, azioni, derivati, ETF)","B3 — Pianificazione, Markowitz, CAPM, misure performance","B4 — Finanza comportamentale: bias, prospect theory","B5 — ESG e SFDR (Art. 6, 8, 9)","Quiz intensivo materia B completa"] },
+                  { fase:"Ago — Sett. 3", periodo:"17-24 agosto", ore:"30-35h ⚠️", cls:"bg-orange-50 border-orange-200", badge:"bg-orange-100 text-orange-700",
+                    items:["LA SETTIMANA PIÙ CRITICA — Materia A normativa (24/60 domande)","A1 — MiFID II: classificazione clienti, servizi, adeguatezza, best execution","A2 — Disciplina CF: albo OCF, requisiti, obblighi CF autonomo, sanzioni","A3 — Gestione collettiva: UCITS vs FIA, SGR, SICAV","A4 — Abusi di mercato: insider trading, manipolazione (MAR)","Quiz intensivo A1-A4 (>85% corretto prima di andare avanti)"] },
+                  { fase:"Ago — Sett. 4", periodo:"25-31 agosto", ore:"28-32h", cls:"bg-orange-50 border-orange-200", badge:"bg-orange-100 text-orange-700",
+                    items:["A5+A6 — Antiriciclaggio + Appello al pubblico","C — Fiscalità: regimi, aliquote 26%/12.5%, redditi di capitale vs diversi, PIR","D — Previdenza: 3 pilastri, TFR, polizze vita (Ramo I, III, V)","E — Diritto privato: contratti, regime patrimoniale, successione","Quiz su C+D+E. Score target >80% su tutte le materie"] },
+                  { fase:"Set. — Sett. 1", periodo:"1-7 settembre", ore:"20-25h", cls:"bg-amber-50 border-amber-200", badge:"bg-amber-100 text-amber-700",
+                    items:["NESSUN nuovo argomento teorico","Quiz mirati per materie con score più basso","Revisione sistematica di tutti gli errori accumulati in agosto","Score target: >85% su ogni materia"] },
+                  { fase:"Set. — Sett. 2", periodo:"8-14 settembre", ore:"20-25h", cls:"bg-amber-50 border-amber-200", badge:"bg-amber-100 text-amber-700",
+                    items:["2 simulazioni complete (60 dom. × 85 min) al giorno","Analisi di ogni domanda sbagliata","Target: >85/100 costante nelle simulazioni","Se score <80: valuta posticipo a novembre"] },
+                  { fase:"Settimana Finale", periodo:"15-21 settembre", ore:"15h + riposo", cls:"bg-emerald-50 border-emerald-200", badge:"bg-emerald-100 text-emerald-700",
+                    items:["3 simulazioni al giorno nei primi 4 giorni","Nessun argomento nuovo — solo revisione errori ricorrenti","Test tecnico: connessione, PC, ambiente esame","RIPOSO COMPLETO le ultime 48h prima dell'esame"] },
+                ].map((f,i) => (
+                  <div key={i} className={`${f.cls} border rounded-xl p-4`}>
+                    <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`${f.badge} text-xs font-bold px-2 py-0.5 rounded-full`}>{f.fase}</span>
+                        <span className="text-sm font-semibold text-gray-700">{f.periodo}</span>
+                      </div>
+                      <span className="text-xs font-bold text-gray-600">{f.ore}</span>
+                    </div>
+                    <ul className="space-y-1">
+                      {f.items.map((item,j) => (
+                        <li key={j} className="text-xs text-gray-700 flex gap-1.5">
+                          <span className="text-gray-400 mt-0.5 shrink-0">•</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                  <div className="font-bold text-red-800 text-sm mb-1">🚨 Criterio Go/No-Go</div>
+                  <div className="text-xs text-red-700">Se il 10 settembre le simulazioni danno ancora &lt;80/100: posticipa a novembre. Il costo è zero. Il costo di fallire è molto più alto.</div>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
